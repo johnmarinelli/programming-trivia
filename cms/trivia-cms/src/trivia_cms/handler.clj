@@ -1,9 +1,12 @@
 (ns trivia-cms.handler
   (:require [clojure.java.io]
+            [clojure.data.json :as json]
+
             [compojure.core :refer :all]
             [compojure.route :as route]
-            [ring.middleware.json :refer [wrap-json-body wrap-json-response]]
+            [ring.middleware.json :refer [wrap-json-params wrap-json-response]]
             [ring.middleware.defaults :refer [wrap-defaults api-defaults]]
+            [ring.util.codec :as codec]
 
             [monger.core :as mg]
             [monger.collection :as mc]
@@ -11,7 +14,9 @@
             [trivia-cms.db :refer :all])
 
   (:use [stencil.core] ; html template rendering
-        [ring.util.response :only [response not-found]])) ; wrap json response
+        [ring.util.response :only [response not-found]] ; wrap json response
+        [monger.operators] ; mongodb operators
+        ))
 
 (defn read-template [filepath]
   (slurp (clojure.java.io/resource filepath)))
@@ -39,46 +44,81 @@
    (:filepath view) 
    (:view-args view)))
 
-(defn save! [quiz]
+(defn save-quiz! [quiz]
   (mc/insert-and-return db-handle quizzes-collection-name quiz))
 
+(defn save-question! [quiz-name question]
+  (mc/find-and-modify db-handle
+                      quizzes-collection-name
+                      {:quiz-name quiz-name} 
+                      {$push {:questions question}}
+                      {:return-new true}))
+
 (defn get-quiz [name]
-  (let [qs (mc/find-maps db-handle quizzes-collection-name {:name name})]
+  (let [qs (mc/find-maps db-handle quizzes-collection-name {:quiz-name name})]
     (if (> (count qs) 0) 
       (update-in 
        (first qs)
        [:_id]
        (fn [qid]
          (.toString qid)))
-      {:error-message (str "Quiz '" name "' not found.")})))
+      nil)))
 
 (defn delete-quiz [name]
-  (let [res (mc/remove db-handle quizzes-collection-name {:name name})] 
+  (let [res (mc/remove db-handle quizzes-collection-name {:quiz-name name})] 
     {:num-deleted (.getN res)}))
 
 (defroutes app-routes
   (GET "/" [request] (load-page (index {})))
+
   (GET "/quizzes" [request] (load-page (quiz {})))
+
+  (POST "/quizzes/:quiz-name/questions/create" [quiz-name & params]
+        (let [question-body (:question-body params)
+              category (:category params)
+              answer (:answer params)
+              value (:value params)
+              question {:question-body question-body
+                        :category category
+                        :answer answer
+                        :value value}]
+          (if (some nil? [name question-body category answer value])
+            {:status 400
+             :body {:error-message "All fields are required when creating questions."}}
+            (response 
+             (update-in
+              (save-question! quiz-name question)
+              [:_id]
+              #(.toString %))))))
+
   (POST "/quizzes/create" req
         (let [params (:params req)
-              question (get params :question)
-              category (get params :category)
-              answer (get params :answer)
-              point-num (get params :points)
-              quiz {:question question
-                    :category category
-                    :answer answer
-                    :value (str point-num)}] 
-          (save! quiz)))
+              quiz-name (:quiz-name params)
+              questions (:questions params)]
+          (if (some nil? [params quiz-name])
+            {:status 400 
+             :body {:error-message  "Name is required when creating quizzes."} }
+            (response               
+             (update-in 
+              (save-quiz! {:quiz-name quiz-name :questions questions}) 
+              [:_id]
+              #(.toString %))))))
 
   (DELETE "/quizzes/:name" [name]
-          (response (delete-quiz name)))
+          (let [num-deleted (delete-quiz name)]
+            (if quiz
+              (response num-deleted)
+              (not-found 
+               (json/write-str {:error-message "Quiz '" name "' not found."})))))
+
+
 
   (GET "/quizzes/:name" [name]
        (let [quiz (get-quiz name)]
-         (if (:error-message quiz)
-           (not-found (:error-message quiz))
+         (if (nil? quiz)
+           (not-found {:error-message (str "Quiz '" name "' not found.")})
            (response quiz))))
+
   (route/resources "/resources")
   (route/not-found "404"))
 
@@ -86,4 +126,5 @@
   (->
    app-routes
    (wrap-defaults api-defaults)
+   (wrap-json-params)
    (wrap-json-response)))

@@ -22,9 +22,12 @@
   :profiles
   {:dev {:dependencies [[javax.servlet/servlet-api "2.5"]
                         [ring/ring-mock "0.3.0"]
-                        [org.clojure/tools.nrepl "0.2.12"]]
+                        [org.clojure/tools.nrepl "0.2.12"]
+                        [org.clojure/data.json "0.2.6"]]
          :jvm-opts ["-Dlogfile.path=dev"]
-         :env {:database-name "ltcla_quizzes"}}
+         :env {:database-name "ltcla_quizzes"}
+         :repl {:dependencies [[trivia-cms.handler]
+                               [trivia-cms.db]]}}
 
    :test {:jvm-opts ["-Dlogfile.path=test"]
           :dependencies [[org.clojure/tools.nrepl "0.2.12"]
