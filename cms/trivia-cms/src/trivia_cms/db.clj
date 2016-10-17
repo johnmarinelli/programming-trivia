@@ -9,7 +9,7 @@
    {:host 
     (or (get (System/getenv) "MONGO_TRIVIA_BOT_HOST") "127.0.0.1") 
     :port 
-    (or (Integer. (get (System/getenv) "MONGO_TRIVIA_BOT_PORT")) 27073)}))
+    (Integer. (or (get (System/getenv) "MONGO_TRIVIA_BOT_PORT") "27017"))}))
 
 (def database (env :database-name))
 (def db-handle (mg/get-db conn database))
