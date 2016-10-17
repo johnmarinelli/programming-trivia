@@ -69,7 +69,7 @@
                      (mock/content-type "application/json")))]
       (is (= (:status response) 400))))
 
-  (testing "create quiz api - no questions"
+  (testing "create quiz api - valid, no questions"
     (let [response (app 
                     (->
                      (mock/request :post 
@@ -109,8 +109,9 @@
 
   (testing "delete quiz api - delete an invalid quiz"
     (let [response (app (mock/request :delete "/quizzes/invalid"))]
-      (is (= (:status response) 200))
-      (is (= (json/read-str (:body response) :key-fn keyword) {:num-deleted 0}))))
+      (is (= (:status response) 404))
+      (is (= (json/read-str (:body response) :key-fn keyword) 
+             {:error-message "Quiz 'invalid' not found."}))))
 
   (testing "create question api - create a new question"
     (let [path (str "/quizzes/" (:quiz-name test-quiz-1) "/questions/create")
