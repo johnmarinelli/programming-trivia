@@ -1,4 +1,2 @@
-node_modules/**
-!node_modules/hubot-trivia-bot/src/*.coffee
 .DS_Store*
 .hubot_history
